@@ -27,6 +27,7 @@ const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
 
 interface MatchListEntry {
   matchId: string;
+  id?: string | null;
   createdAt: string;
   mode: string;
   limit: number;
@@ -94,6 +95,44 @@ interface RoundBreakdown {
   winner: 'you' | 'opponent' | 'draw';
 }
 
+type MatchListWireEntry = Omit<MatchListEntry, 'matchId'> & {
+  matchId?: string | null;
+};
+
+type MatchDetailWire = Omit<MatchDetail, 'players'> & {
+  players: Array<Omit<MatchDetailPlayer, 'progressSamples'> & { progressSamples: unknown }>;
+};
+
+function resolveMatchId(match: { matchId?: string | null; id?: string | null }) {
+  return (match.matchId ?? match.id ?? '').trim();
+}
+
+function normalizeMatchListEntry(match: MatchListWireEntry): MatchListEntry {
+  return {
+    ...match,
+    matchId: resolveMatchId(match),
+  };
+}
+
+function normalizeProgressSamples(value: unknown): number[] | null {
+  if (!Array.isArray(value)) return null;
+  const next = value
+    .map((sample) => (typeof sample === 'number' ? sample : Number(sample)))
+    .filter((sample) => Number.isFinite(sample));
+  return next.length > 0 ? next : [];
+}
+
+function normalizeMatchDetail(match: MatchDetailWire): MatchDetail {
+  const players = Array.isArray(match.players) ? match.players : [];
+  return {
+    ...match,
+    players: players.map((player) => ({
+      ...player,
+      progressSamples: normalizeProgressSamples(player.progressSamples),
+    })),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Match History List
 // ---------------------------------------------------------------------------
@@ -115,7 +154,10 @@ export function MatchHistoryList() {
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data) {
-          setMatches(data.matches ?? []);
+          const nextMatches = Array.isArray(data.matches)
+            ? (data.matches as MatchListWireEntry[]).map(normalizeMatchListEntry)
+            : [];
+          setMatches(nextMatches);
           setTotal(data.total ?? 0);
         }
       })
@@ -151,12 +193,12 @@ export function MatchHistoryList() {
         ) : matches.length === 0 ? (
           <div className="text-center text-muted-foreground py-12">No matches yet.</div>
         ) : (
-          <motion.div className="space-y-2" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            {matches.map((match) => (
-              <MatchRow key={match.matchId} match={match} />
-            ))}
-          </motion.div>
-        )}
+            <motion.div className="space-y-2" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              {matches.map((match) => (
+                <MatchRow key={match.matchId || `${match.createdAt}-${match.seed}`} match={match} />
+              ))}
+            </motion.div>
+          )}
 
         {/* Pagination */}
         {total > limit && (
@@ -203,7 +245,7 @@ export function MatchDetailView() {
     })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (data) setMatch(data);
+        if (data) setMatch(normalizeMatchDetail(data as MatchDetailWire));
       })
       .finally(() => setLoading(false));
   }, [token, matchId]);
@@ -237,8 +279,10 @@ export function MatchDetailView() {
     );
   }
 
-  const you = match.players.find((p) => p.userId === user?.id);
-  const opponent = match.players.find((p) => p.userId !== user?.id);
+  const you = match.players.find((p) => p.userId === user?.id) ?? match.players[0] ?? null;
+  const opponent = you
+    ? (match.players.find((p) => p.userId !== you.userId) ?? null)
+    : (match.players[1] ?? null);
   const date = new Date(match.createdAt);
   const rounds = buildRoundBreakdown(you?.progressSamples ?? [], opponent?.progressSamples ?? [], match.limit);
   const isPlacementGame = you?.ratingBefore == null;
@@ -384,6 +428,16 @@ export function MatchDetailView() {
           </motion.div>
         )}
 
+        {you && opponent && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.28 }}
+          >
+            <HeadToHeadTable you={you} opponent={opponent} />
+          </motion.div>
+        )}
+
         {/* Match meta */}
         <motion.div
           className="text-xs text-muted-foreground text-center space-x-4"
@@ -405,6 +459,9 @@ export function MatchDetailView() {
 // ---------------------------------------------------------------------------
 
 function MatchRow({ match }: { match: MatchListEntry }) {
+  const navigate = useNavigate();
+  const matchId = resolveMatchId(match);
+  const canOpen = matchId.length > 0;
   const result = match.you.result;
   const resultLabel = result === 'win' ? 'WIN' : result === 'loss' ? 'LOSS' : result === 'draw' ? 'DRAW' : '—';
   const isPlacementGame = match.you.ratingBefore == null;
@@ -418,54 +475,57 @@ function MatchRow({ match }: { match: MatchListEntry }) {
   const date = new Date(match.createdAt);
 
   return (
-    <Link to={`/history/${match.matchId}`}>
-      <div
-        className={cn(
-          'flex items-center justify-between p-3 rounded-lg border transition-colors',
-          'hover:bg-secondary/50',
-          result === 'win' && 'border-green-500/20 bg-green-500/5',
-          result === 'loss' && 'border-red-500/20 bg-red-500/5',
-          result === 'draw' && 'border-border bg-card/50',
-        )}
-      >
-        <div className="flex items-center gap-3">
-          <span
-            className={cn(
-              'text-xs font-bold uppercase px-2 py-0.5 rounded min-w-[3.5rem] text-center',
-              result === 'win' && 'bg-green-500/20 text-green-400',
-              result === 'loss' && 'bg-red-500/20 text-red-400',
-              result === 'draw' && 'bg-muted text-muted-foreground',
-            )}
-          >
-            {resultLabel}
-          </span>
-          <div>
-            <span className="text-sm font-medium">vs {oppName}</span>
-            <div className="text-xs text-muted-foreground">
-              {date.toLocaleDateString()} {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              {' · '}
-              {match.limit}s {match.mode}
-            </div>
+    <button
+      type="button"
+      onClick={() => canOpen && navigate(`/history/${encodeURIComponent(matchId)}`)}
+      disabled={!canOpen}
+      className={cn(
+        'w-full text-left',
+        'flex items-center justify-between p-3 rounded-lg border transition-colors',
+        canOpen ? 'hover:bg-secondary/50 cursor-pointer' : 'opacity-60 cursor-not-allowed',
+        result === 'win' && 'border-green-500/20 bg-green-500/5',
+        result === 'loss' && 'border-red-500/20 bg-red-500/5',
+        result === 'draw' && 'border-border bg-card/50',
+      )}
+    >
+      <div className="flex items-center gap-3">
+        <span
+          className={cn(
+            'text-xs font-bold uppercase px-2 py-0.5 rounded min-w-[3.5rem] text-center',
+            result === 'win' && 'bg-green-500/20 text-green-400',
+            result === 'loss' && 'bg-red-500/20 text-red-400',
+            result === 'draw' && 'bg-muted text-muted-foreground',
+          )}
+        >
+          {resultLabel}
+        </span>
+        <div>
+          <span className="text-sm font-medium">vs {oppName}</span>
+          <div className="text-xs text-muted-foreground">
+            {date.toLocaleDateString()} {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            {' · '}
+            {match.limit}s {match.mode}
           </div>
         </div>
-        <div className="flex items-center gap-4 text-sm">
-          {isPlacementGame ? (
-            <span className="font-semibold min-w-[6.5rem] text-right text-primary">PLACEMENT +1</span>
-          ) : (
-            <span
-              className={cn(
-                'font-semibold min-w-[4.5rem] text-right',
-                delta > 0 && 'text-green-400',
-                delta < 0 && 'text-red-400',
-                delta === 0 && 'text-muted-foreground',
-              )}
-            >
-              ELO {delta > 0 ? '+' : ''}{delta}
-            </span>
-          )}
-        </div>
       </div>
-    </Link>
+      <div className="flex items-center gap-4 text-sm">
+        {isPlacementGame ? (
+          <span className="font-semibold min-w-[6.5rem] text-right text-primary">PLACEMENT +1</span>
+        ) : (
+          <span
+            className={cn(
+              'font-semibold min-w-[4.5rem] text-right',
+              delta > 0 && 'text-green-400',
+              delta < 0 && 'text-red-400',
+              delta === 0 && 'text-muted-foreground',
+            )}
+          >
+            ELO {delta > 0 ? '+' : ''}{delta}
+          </span>
+        )}
+        <span className="text-xs text-muted-foreground">{canOpen ? 'Details →' : 'Unavailable'}</span>
+      </div>
+    </button>
   );
 }
 
@@ -524,6 +584,64 @@ function PlayerStatsCard({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function HeadToHeadTable({
+  you,
+  opponent,
+}: {
+  you: MatchDetailPlayer;
+  opponent: MatchDetailPlayer;
+}) {
+  const rows = [
+    { label: 'WPM', you: formatStatValue(you.wpm), opponent: formatStatValue(opponent.wpm) },
+    { label: 'Raw WPM', you: formatStatValue(you.rawWpm), opponent: formatStatValue(opponent.rawWpm) },
+    { label: 'Accuracy', you: formatPercentValue(you.accuracy), opponent: formatPercentValue(opponent.accuracy) },
+    { label: 'Consistency', you: formatPercentValue(you.consistency), opponent: formatPercentValue(opponent.consistency) },
+    { label: 'Score', you: formatStatValue(you.score), opponent: formatStatValue(opponent.score) },
+    { label: 'Errors', you: formatStatValue(you.errors), opponent: formatStatValue(opponent.errors) },
+    { label: 'Correct Chars', you: formatStatValue(you.correctChars), opponent: formatStatValue(opponent.correctChars) },
+    { label: 'Total Typed', you: formatStatValue(you.totalTyped), opponent: formatStatValue(opponent.totalTyped) },
+    { label: 'Damage Dealt', you: formatStatValue(you.damageDealt), opponent: formatStatValue(opponent.damageDealt) },
+    { label: 'Damage Taken', you: formatStatValue(you.damageTaken), opponent: formatStatValue(opponent.damageTaken) },
+  ];
+
+  return (
+    <Card className="border-border bg-card/80">
+      <CardContent className="p-6">
+        <h3 className="text-sm font-medium text-muted-foreground mb-4">Full Match Breakdown</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[520px] text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase text-muted-foreground border-b border-border">
+                <th className="py-2 font-medium">Metric</th>
+                <th className="py-2 font-medium">You</th>
+                <th className="py-2 font-medium">{opponent.username}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.label} className="border-b border-border/50 last:border-b-0">
+                  <td className="py-2 text-muted-foreground">{row.label}</td>
+                  <td className="py-2 font-mono">{row.you}</td>
+                  <td className="py-2 font-mono">{row.opponent}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function MetricChip({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-md border border-border/70 bg-background/30 px-2 py-1.5">
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="font-mono text-sm">{value}</div>
+    </div>
   );
 }
 
@@ -609,6 +727,16 @@ function resolveDisplayRatingDelta(
   if (result === 'win') return 12;
   if (result === 'loss') return -12;
   return 0;
+}
+
+function formatStatValue(value: number | null) {
+  if (value == null || Number.isNaN(value)) return '—';
+  return Math.round(value);
+}
+
+function formatPercentValue(value: number | null) {
+  if (value == null || Number.isNaN(value)) return '—';
+  return `${Math.round(value * 100)}%`;
 }
 
 function WpmGraph({

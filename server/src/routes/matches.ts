@@ -125,7 +125,7 @@ export async function matchRoutes(app: FastifyInstance) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
 
-    const params = z.object({ matchId: z.string().uuid() }).safeParse(request.params);
+    const params = z.object({ matchId: z.string().trim().min(1).max(128) }).safeParse(request.params);
     if (!params.success) {
       return reply.status(400).send({ error: 'Invalid match id' });
     }

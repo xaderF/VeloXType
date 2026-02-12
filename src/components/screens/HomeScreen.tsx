@@ -112,7 +112,7 @@ export function HomeScreen({
       case 'career': onCareer(); break;
       case 'leaderboard': onLeaderboard(); break;
       case 'store': onStore?.(); break;
-      case 'armory': (onArmory ?? onCareer)?.(); break;
+      case 'armory': onArmory?.(); break;
       case 'settings': onSettings?.(); break;
     }
   };

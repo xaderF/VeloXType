@@ -41,7 +41,8 @@ interface ProfileStats {
 }
 
 interface MatchEntry {
-  matchId: string;
+  matchId?: string | null;
+  id?: string | null;
   createdAt: string;
   mode: string;
   limit: number;
@@ -61,6 +62,10 @@ interface MatchEntry {
     username: string;
     rating: number | null;
   } | null;
+}
+
+function resolveMatchId(match: { matchId?: string | null; id?: string | null }) {
+  return (match.matchId ?? match.id ?? '').trim();
 }
 
 export default function Profile() {
@@ -94,7 +99,15 @@ export default function Profile() {
     ])
       .then(([statsData, matchData]) => {
         if (statsData) setStats(statsData);
-        if (matchData) setMatches(matchData.matches ?? []);
+        if (matchData) {
+          const nextMatches = Array.isArray(matchData.matches)
+            ? (matchData.matches as MatchEntry[]).map((match) => ({
+              ...match,
+              matchId: resolveMatchId(match),
+            }))
+            : [];
+          setMatches(nextMatches);
+        }
       })
       .finally(() => setLoading(false));
   }, [token]);
@@ -151,11 +164,6 @@ export default function Profile() {
               <div className="inline-flex w-full flex-wrap gap-2">
                 <Badge variant="secondary" className="tracking-wide uppercase">Match History</Badge>
                 <Badge variant="outline" className="tracking-wide uppercase">Act Rank</Badge>
-                <Link to="/leaderboard">
-                  <Badge variant="outline" className="tracking-wide uppercase hover:bg-secondary/70 transition-colors">
-                    Leaderboard
-                  </Badge>
-                </Link>
               </div>
             </CardHeader>
 
@@ -228,7 +236,7 @@ export default function Profile() {
                 ) : (
                   <div className="space-y-2 max-h-[460px] overflow-auto pr-1">
                     {recentMatches.map((match) => (
-                      <MatchRow key={match.matchId} match={match} />
+                      <MatchRow key={resolveMatchId(match) || `${match.createdAt}-${match.mode}-${match.limit}`} match={match} />
                     ))}
                   </div>
                 )}
@@ -380,6 +388,9 @@ function RankEmblem({ rank, className }: { rank: Rank; className?: string }) {
 }
 
 function MatchRow({ match }: { match: MatchEntry }) {
+  const navigate = useNavigate();
+  const matchId = resolveMatchId(match);
+  const canOpen = matchId.length > 0;
   const result = match.you.result;
   const opponentName = match.opponent?.username ?? 'Unknown';
   const date = new Date(match.createdAt);
@@ -404,37 +415,45 @@ function MatchRow({ match }: { match: MatchEntry }) {
       : 'text-muted-foreground';
 
   return (
-    <Link to={`/history/${match.matchId}`} className="block">
-      <div className={cn('rounded-lg border p-3 transition-colors hover:bg-secondary/60', resultTone)}>
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <p className={cn('text-sm font-semibold tracking-wide min-w-[4.8rem]', resultTextTone)}>{resultLabel}</p>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold truncate">vs {opponentName}</p>
-              <p className="text-xs text-muted-foreground truncate">
-                {date.toLocaleDateString()} {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </p>
-            </div>
-          </div>
-
-          <div className="text-right">
-            {isPlacementGame ? (
-              <p className="text-sm font-mono font-semibold text-primary">PLACEMENT +1</p>
-            ) : (
-              <p className={cn(
-                'text-sm font-mono font-semibold',
-                delta > 0 && 'text-emerald-300',
-                delta < 0 && 'text-rose-300',
-                delta === 0 && 'text-muted-foreground',
-              )}
-              >
-                ELO {delta > 0 ? '+' : ''}{delta}
-              </p>
-            )}
+    <button
+      type="button"
+      onClick={() => canOpen && navigate(`/history/${encodeURIComponent(matchId)}`)}
+      disabled={!canOpen}
+      className={cn(
+        'w-full rounded-lg border p-3 transition-colors text-left',
+        canOpen ? 'hover:bg-secondary/60 cursor-pointer' : 'opacity-60 cursor-not-allowed',
+        resultTone,
+      )}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <p className={cn('text-sm font-semibold tracking-wide min-w-[4.8rem]', resultTextTone)}>{resultLabel}</p>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold truncate">vs {opponentName}</p>
+            <p className="text-xs text-muted-foreground truncate">
+              {date.toLocaleDateString()} {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </p>
           </div>
         </div>
+
+        <div className="text-right">
+          {isPlacementGame ? (
+            <p className="text-sm font-mono font-semibold text-primary">PLACEMENT +1</p>
+          ) : (
+            <p className={cn(
+              'text-sm font-mono font-semibold',
+              delta > 0 && 'text-emerald-300',
+              delta < 0 && 'text-rose-300',
+              delta === 0 && 'text-muted-foreground',
+            )}
+            >
+              ELO {delta > 0 ? '+' : ''}{delta}
+            </p>
+          )}
+          <p className="text-[11px] text-muted-foreground">{canOpen ? 'Details →' : 'Unavailable'}</p>
+        </div>
       </div>
-    </Link>
+    </button>
   );
 }
 
