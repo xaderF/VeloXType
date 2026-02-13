@@ -15,6 +15,7 @@ npm install
   - `DATABASE_URL` (Postgres)
   - `AUTH_SECRET` (required, min 32 chars)
   - `CORS_ORIGIN` (required in production; comma-separated allowed origins)
+  - `ADMIN_USERNAMES` (optional; comma-separated usernames that should be admin)
   - `OAUTH_GOOGLE_CLIENT_ID` (optional; required only if using Google OAuth login)
   - `DAILY_RESET_TIMEZONE` (IANA tz for daily challenge rollover, default `America/New_York`)
 
@@ -33,6 +34,7 @@ npm run dev
 - POST /auth/register — create account with username/password
 - POST /auth/login — login with username/email + password
 - POST /auth/oauth — OAuth-style identity login/link
+- PATCH /admin/users/:userId/role — admin-only role update (`ADMIN` / `USER`)
 - GET /profile — fetch authenticated profile
 - PATCH /profile — update username/email/settings
 - GET /matches — list authenticated match history

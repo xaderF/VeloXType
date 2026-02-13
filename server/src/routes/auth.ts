@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../db.js';
+import { env } from '../env.js';
 import {
   createAuthToken,
   hashPassword,
@@ -43,6 +44,10 @@ const loginSchema = z.object({
   rememberMe: z.boolean().optional().default(false),
 });
 
+const roleSchema = z.enum(['USER', 'ADMIN']);
+const updateUserRoleSchema = z.object({ role: roleSchema });
+const updateUserRoleParamsSchema = z.object({ userId: z.string().uuid() });
+
 const oauthSchema = z.object({
   provider: z.string().trim().min(2).max(40),
   idToken: z.string().trim().min(10).optional(),
@@ -75,6 +80,37 @@ async function makeUniqueUsername(db: PrismaClient, base: string) {
 function sanitizeUsernameFallback(value: string) {
   const cleaned = value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
   return cleaned.length >= 3 ? cleaned : `user_${Math.floor(Math.random() * 999_999)}`;
+}
+
+function parseAdminUsernames(value: string | undefined) {
+  if (!value) return [];
+  return Array.from(new Set(
+    value
+      .split(',')
+      .map((username) => username.trim().toLowerCase())
+      .filter(Boolean),
+  ));
+}
+
+function shouldAssignAdminRole(username: string) {
+  return parseAdminUsernames(env.ADMIN_USERNAMES).includes(username.toLowerCase());
+}
+
+async function applyAdminRoleBootstrap(db: PrismaClient, app: FastifyInstance) {
+  const adminUsernames = parseAdminUsernames(env.ADMIN_USERNAMES);
+  if (adminUsernames.length === 0) return;
+
+  const result = await db.user.updateMany({
+    where: {
+      username: { in: adminUsernames },
+      role: { not: 'ADMIN' },
+    },
+    data: { role: 'ADMIN' },
+  });
+
+  if (result.count > 0) {
+    app.log.info({ updatedCount: result.count, adminUsernames }, 'Applied admin role bootstrap');
+  }
 }
 
 async function backfillLegacyEmailHashes(db: PrismaClient, app: FastifyInstance) {
@@ -115,14 +151,16 @@ export async function authRoutes(app: FastifyInstance) {
     app.post('/auth/register', async (_request: FastifyRequest, reply: FastifyReply) => sendDatabaseUnavailable(reply));
     app.post('/auth/login', async (_request: FastifyRequest, reply: FastifyReply) => sendDatabaseUnavailable(reply));
     app.post('/auth/oauth', async (_request: FastifyRequest, reply: FastifyReply) => sendDatabaseUnavailable(reply));
+    app.patch('/admin/users/:userId/role', async (_request: FastifyRequest, reply: FastifyReply) => sendDatabaseUnavailable(reply));
     return;
   }
 
   const db = prisma;
   await backfillLegacyEmailHashes(db, app);
+  await applyAdminRoleBootstrap(db, app);
 
-  // Stricter rate limits for auth endpoints: 10 attempts per minute per IP
-  const authRateConfig = { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } };
+  // Stricter rate limits for auth endpoints, while allowing normal retry behavior.
+  const authRateConfig = { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } };
 
   app.post('/auth/register', authRateConfig, async (request: FastifyRequest, reply: FastifyReply) => {
     const parsed = registerSchema.safeParse(request.body);
@@ -150,6 +188,7 @@ export async function authRoutes(app: FastifyInstance) {
     const created = await db.user.create({
       data: {
         username,
+        role: shouldAssignAdminRole(username) ? 'ADMIN' : 'USER',
         email: encryptedEmail,
         emailHash,
         passwordHash,
@@ -158,12 +197,16 @@ export async function authRoutes(app: FastifyInstance) {
       include: { rating: true },
     });
 
-    const token = createAuthToken({ id: created.id, username: created.username }, parsed.data.rememberMe);
+    const token = createAuthToken(
+      { id: created.id, username: created.username, role: created.role },
+      parsed.data.rememberMe,
+    );
     return {
       token,
       user: {
         id: created.id,
         username: created.username,
+        role: created.role,
         email,
         createdAt: created.createdAt,
         rating: created.rating?.rating ?? null,
@@ -194,12 +237,16 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(401).send({ error: 'Invalid credentials' });
     }
 
-    const token = createAuthToken({ id: user.id, username: user.username }, parsed.data.rememberMe);
+    const token = createAuthToken(
+      { id: user.id, username: user.username, role: user.role },
+      parsed.data.rememberMe,
+    );
     return {
       token,
       user: {
         id: user.id,
         username: user.username,
+        role: user.role,
         email: user.email ? decryptPii(user.email) : null,
         createdAt: user.createdAt,
         rating: user.rating?.rating ?? null,
@@ -240,20 +287,24 @@ export async function authRoutes(app: FastifyInstance) {
     });
 
     if (existingOauthUser) {
-      const token = createAuthToken({ id: existingOauthUser.id, username: existingOauthUser.username }, true);
+      const token = createAuthToken(
+        { id: existingOauthUser.id, username: existingOauthUser.username, role: existingOauthUser.role },
+        true,
+      );
       return {
         token,
         user: {
           id: existingOauthUser.id,
           username: existingOauthUser.username,
+          role: existingOauthUser.role,
           email: existingOauthUser.email ? decryptPii(existingOauthUser.email) : null,
-            createdAt: existingOauthUser.createdAt,
-            rating: existingOauthUser.rating?.rating ?? null,
-            competitiveElo: existingOauthUser.rating?.competitiveElo ?? null,
-            placementGamesPlayed: existingOauthUser.rating?.placementGamesPlayed ?? 0,
-            settings: existingOauthUser.settings,
-          },
-        };
+          createdAt: existingOauthUser.createdAt,
+          rating: existingOauthUser.rating?.rating ?? null,
+          competitiveElo: existingOauthUser.rating?.competitiveElo ?? null,
+          placementGamesPlayed: existingOauthUser.rating?.placementGamesPlayed ?? 0,
+          settings: existingOauthUser.settings,
+        },
+      };
     }
 
     const byEmail = await db.user.findUnique({
@@ -267,6 +318,7 @@ export async function authRoutes(app: FastifyInstance) {
       const updated = await db.user.update({
         where: { id: byEmail.id },
         data: {
+          role: shouldAssignAdminRole(byEmail.username) ? 'ADMIN' : byEmail.role,
           oauthProvider: provider,
           oauthSubject: providerUserId,
           email: encryptPii(email),
@@ -274,12 +326,16 @@ export async function authRoutes(app: FastifyInstance) {
         },
         include: { rating: true },
       });
-      const token = createAuthToken({ id: updated.id, username: updated.username }, true);
+      const token = createAuthToken(
+        { id: updated.id, username: updated.username, role: updated.role },
+        true,
+      );
       return {
         token,
         user: {
           id: updated.id,
           username: updated.username,
+          role: updated.role,
           email: updated.email ? decryptPii(updated.email) : null,
           createdAt: updated.createdAt,
           rating: updated.rating?.rating ?? null,
@@ -295,6 +351,7 @@ export async function authRoutes(app: FastifyInstance) {
     const created = await db.user.create({
       data: {
         username,
+        role: shouldAssignAdminRole(username) ? 'ADMIN' : 'USER',
         email: encryptedEmail,
         emailHash,
         oauthProvider: provider,
@@ -304,12 +361,16 @@ export async function authRoutes(app: FastifyInstance) {
       include: { rating: true },
     });
 
-    const token = createAuthToken({ id: created.id, username: created.username }, true);
+    const token = createAuthToken(
+      { id: created.id, username: created.username, role: created.role },
+      true,
+    );
     return {
       token,
       user: {
         id: created.id,
         username: created.username,
+        role: created.role,
         email,
         createdAt: created.createdAt,
         rating: created.rating?.rating ?? null,
@@ -317,6 +378,50 @@ export async function authRoutes(app: FastifyInstance) {
         placementGamesPlayed: created.rating?.placementGamesPlayed ?? 0,
         settings: created.settings,
       },
+    };
+  });
+
+  app.patch('/admin/users/:userId/role', authRateConfig, async (request: FastifyRequest, reply: FastifyReply) => {
+    const token = getBearerToken(request.headers.authorization ?? undefined);
+    const authUser = token ? verifyAuthToken(token) : null;
+    if (!authUser) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    const requester = await db.user.findUnique({
+      where: { id: authUser.id },
+      select: { role: true },
+    });
+    if (!requester || requester.role !== 'ADMIN') {
+      return reply.status(403).send({ error: 'Admin access required' });
+    }
+
+    const parsedParams = updateUserRoleParamsSchema.safeParse(request.params);
+    const parsedBody = updateUserRoleSchema.safeParse(request.body);
+    if (!parsedParams.success || !parsedBody.success) {
+      return reply.status(400).send({ error: 'Invalid payload' });
+    }
+
+    if (parsedParams.data.userId === authUser.id && parsedBody.data.role !== 'ADMIN') {
+      return reply.status(400).send({ error: 'You cannot demote your own admin account' });
+    }
+
+    const targetUser = await db.user.findUnique({
+      where: { id: parsedParams.data.userId },
+      select: { id: true },
+    });
+    if (!targetUser) {
+      return reply.status(404).send({ error: 'User not found' });
+    }
+
+    const updated = await db.user.update({
+      where: { id: parsedParams.data.userId },
+      data: { role: parsedBody.data.role },
+      select: { id: true, username: true, role: true },
+    });
+
+    return {
+      user: updated,
     };
   });
 
@@ -344,13 +449,17 @@ export async function authRoutes(app: FastifyInstance) {
     const rememberMe = rememberMeBody.success && rememberMeBody.data.rememberMe !== undefined
       ? rememberMeBody.data.rememberMe
       : (getTokenRememberMe(oldToken) ?? false);
-    const newToken = createAuthToken({ id: user.id, username: user.username }, rememberMe);
+    const newToken = createAuthToken(
+      { id: user.id, username: user.username, role: user.role },
+      rememberMe,
+    );
 
     return {
       token: newToken,
       user: {
         id: user.id,
         username: user.username,
+        role: user.role,
         email: user.email ? decryptPii(user.email) : null,
         createdAt: user.createdAt,
         rating: user.rating?.rating ?? null,

@@ -1,7 +1,7 @@
 // SettingsPanel — modal popup with placeholder settings
 // Opens from the lobby nav. All controls are non-functional placeholders.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
@@ -135,9 +135,20 @@ export interface SettingsPanelProps {
   onClose: () => void;
   showFps: boolean;
   onShowFpsChange: (value: boolean) => void;
+  isAuthenticated: boolean;
+  isAdmin: boolean;
+  onOpenAdmin: () => void;
 }
 
-export function SettingsPanel({ isOpen, onClose, showFps, onShowFpsChange }: SettingsPanelProps) {
+export function SettingsPanel({
+  isOpen,
+  onClose,
+  showFps,
+  onShowFpsChange,
+  isAuthenticated,
+  isAdmin,
+  onOpenAdmin,
+}: SettingsPanelProps) {
   // All placeholder state — none persisted or functional yet
   const [masterVolume, setMasterVolume] = useState(80);
   const [sfxVolume, setSfxVolume] = useState(70);
@@ -152,6 +163,37 @@ export function SettingsPanel({ isOpen, onClose, showFps, onShowFpsChange }: Set
   const [reducedMotion, setReducedMotion] = useState(false);
   const [theme, setTheme] = useState('Dark');
   const [keyboardLayout, setKeyboardLayout] = useState('QWERTY');
+  const [showAdminApplication, setShowAdminApplication] = useState(false);
+  const [applicationReason, setApplicationReason] = useState('');
+  const [applicationSubmitted, setApplicationSubmitted] = useState(false);
+
+  const openAdmin = () => {
+    if (isAdmin) {
+      onClose();
+      onOpenAdmin();
+      return;
+    }
+    setShowAdminApplication(true);
+  };
+
+  const submitAdminApplication = () => {
+    if (!applicationReason.trim()) return;
+    setApplicationSubmitted(true);
+  };
+
+  const closeAdminApplication = () => {
+    setShowAdminApplication(false);
+    setApplicationReason('');
+    setApplicationSubmitted(false);
+  };
+
+  useEffect(() => {
+    if (!isOpen) {
+      setShowAdminApplication(false);
+      setApplicationReason('');
+      setApplicationSubmitted(false);
+    }
+  }, [isOpen]);
 
   return (
     <AnimatePresence>
@@ -185,12 +227,20 @@ export function SettingsPanel({ isOpen, onClose, showFps, onShowFpsChange }: Set
               <h2 className="text-lg font-bold tracking-[0.15em] uppercase text-lobby-text">
                 Settings
               </h2>
-              <button
-                onClick={onClose}
-                className="text-lobby-text-muted hover:text-lobby-text transition-colors text-lg"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={openAdmin}
+                  className="rounded-lg border border-lobby-text-muted/25 px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] uppercase text-lobby-text hover:border-accent/40 hover:text-accent transition-colors"
+                >
+                  Admin
+                </button>
+                <button
+                  onClick={onClose}
+                  className="text-lobby-text-muted hover:text-lobby-text transition-colors text-lg"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             {/* Scrollable content */}
@@ -245,6 +295,12 @@ export function SettingsPanel({ isOpen, onClose, showFps, onShowFpsChange }: Set
                 <ToggleRow label="Reduced Motion" value={reducedMotion} onChange={setReducedMotion} />
               </SettingsSection>
 
+              {!isAuthenticated && (
+                <p className="text-xs text-lobby-text-muted/70">
+                  Log in to submit an admin application.
+                </p>
+              )}
+
               {/* Placeholder notice */}
               <div className="text-center pt-2 pb-1">
                 <p className="text-xs text-lobby-text-muted/50 italic">
@@ -252,6 +308,83 @@ export function SettingsPanel({ isOpen, onClose, showFps, onShowFpsChange }: Set
                 </p>
               </div>
             </div>
+
+            <AnimatePresence>
+              {showAdminApplication && (
+                <motion.div
+                  className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 p-4"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                >
+                  <motion.div
+                    className="w-full max-w-md rounded-xl border border-lobby-text-muted/20 bg-lobby-bg p-5 shadow-2xl"
+                    initial={{ scale: 0.95, opacity: 0, y: 8 }}
+                    animate={{ scale: 1, opacity: 1, y: 0 }}
+                    exit={{ scale: 0.95, opacity: 0, y: 8 }}
+                  >
+                    <div className="mb-3 flex items-center justify-between">
+                      <h3 className="text-sm font-semibold tracking-[0.14em] uppercase text-lobby-text">
+                        Admin Application
+                      </h3>
+                      <button
+                        onClick={closeAdminApplication}
+                        className="text-lobby-text-muted hover:text-lobby-text transition-colors"
+                        aria-label="Close admin application"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    {applicationSubmitted ? (
+                      <div className="space-y-4">
+                        <p className="text-sm text-lobby-text">
+                          Application submitted. We will review it.
+                        </p>
+                        <button
+                          onClick={closeAdminApplication}
+                          className="w-full rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-black"
+                        >
+                          Close
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <p className="text-sm text-lobby-text-muted">
+                          Tell us why you want admin access.
+                        </p>
+                        <textarea
+                          value={applicationReason}
+                          onChange={(e) => setApplicationReason(e.target.value)}
+                          placeholder="Write your admin application..."
+                          className="min-h-28 w-full resize-y rounded-lg border border-lobby-text-muted/20 bg-lobby-bg px-3 py-2 text-sm text-lobby-text outline-none focus:border-accent/50"
+                        />
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={submitAdminApplication}
+                            disabled={!isAuthenticated || !applicationReason.trim()}
+                            className={cn(
+                              'flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition-colors',
+                              isAuthenticated && applicationReason.trim()
+                                ? 'bg-accent text-black hover:brightness-110'
+                                : 'bg-lobby-text-muted/20 text-lobby-text-muted cursor-not-allowed',
+                            )}
+                          >
+                            Submit
+                          </button>
+                          <button
+                            onClick={closeAdminApplication}
+                            className="rounded-lg border border-lobby-text-muted/25 px-3 py-2 text-sm text-lobby-text-muted hover:text-lobby-text transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         </motion.div>
       )}

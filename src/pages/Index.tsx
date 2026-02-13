@@ -1275,6 +1275,9 @@ const Index = () => {
           onClose={() => setShowSettings(false)}
           showFps={showFps}
           onShowFpsChange={setShowFps}
+          isAuthenticated={auth.isAuthenticated}
+          isAdmin={auth.user?.role === 'ADMIN'}
+          onOpenAdmin={() => navigate('/admin')}
         />
 
         <FpsOverlay isVisible={showFps} />
@@ -1560,6 +1563,9 @@ const Index = () => {
           onClose={() => setShowSettings(false)}
           showFps={showFps}
           onShowFpsChange={setShowFps}
+          isAuthenticated={auth.isAuthenticated}
+          isAdmin={auth.user?.role === 'ADMIN'}
+          onOpenAdmin={() => navigate('/admin')}
         />
 
         <FpsOverlay isVisible={showFps} />
@@ -1697,6 +1703,9 @@ const Index = () => {
         onClose={() => setShowSettings(false)}
         showFps={showFps}
         onShowFpsChange={setShowFps}
+        isAuthenticated={auth.isAuthenticated}
+        isAdmin={auth.user?.role === 'ADMIN'}
+        onOpenAdmin={() => navigate('/admin')}
       />
 
       <FpsOverlay isVisible={showFps} />

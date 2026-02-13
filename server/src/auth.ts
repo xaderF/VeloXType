@@ -14,6 +14,7 @@ const REVOCATION_FILE_PATH = resolve(
 type TokenPayload = {
   sub: string;
   username: string;
+  role: 'USER' | 'ADMIN';
   iat: number;
   exp: number;
   remember: boolean;
@@ -22,6 +23,7 @@ type TokenPayload = {
 export type AuthUser = {
   id: string;
   username: string;
+  role: 'USER' | 'ADMIN';
 };
 
 type RevokedTokenRecord = {
@@ -75,6 +77,7 @@ export function createAuthToken(user: AuthUser, rememberMe = false) {
   const payload: TokenPayload = {
     sub: user.id,
     username: user.username,
+    role: user.role,
     iat: now,
     exp: now + ttl,
     remember: rememberMe,
@@ -92,17 +95,22 @@ function parseTokenPayload(token: string): TokenPayload | null {
   }
   try {
     const payload = parts[1];
-    const decoded = JSON.parse(base64UrlDecode(payload)) as TokenPayload;
+    const decoded = JSON.parse(base64UrlDecode(payload)) as Partial<TokenPayload>;
     if (
       typeof decoded.sub !== 'string' ||
       typeof decoded.username !== 'string' ||
+      (decoded.role !== undefined && decoded.role !== 'USER' && decoded.role !== 'ADMIN') ||
       typeof decoded.exp !== 'number' ||
       typeof decoded.iat !== 'number'
     ) {
       return null;
     }
     return {
-      ...decoded,
+      sub: decoded.sub,
+      username: decoded.username,
+      role: decoded.role === 'ADMIN' ? 'ADMIN' : 'USER',
+      iat: decoded.iat,
+      exp: decoded.exp,
       remember: typeof decoded.remember === 'boolean' ? decoded.remember : false,
     };
   } catch {
@@ -142,7 +150,7 @@ function verifyAndDecodeToken(token: string): TokenPayload | null {
 export function verifyAuthToken(token: string): AuthUser | null {
   const decoded = verifyAndDecodeToken(token);
   if (!decoded) return null;
-  return { id: decoded.sub, username: decoded.username };
+  return { id: decoded.sub, username: decoded.username, role: decoded.role };
 }
 
 export function getTokenRememberMe(token: string): boolean | null {

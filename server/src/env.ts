@@ -25,6 +25,7 @@ const envSchema = z.object({
   CORS_ORIGIN: z.string().optional(),        // comma-separated allowed origins for production
   PII_ENCRYPTION_KEY: optionalMin32Secret, // optional; falls back to AUTH_SECRET-derived key
   EMAIL_HASH_KEY: optionalMin32Secret, // optional; falls back to AUTH_SECRET when omitted
+  ADMIN_USERNAMES: z.string().optional(), // optional; comma-separated usernames to force-admin
   OAUTH_GOOGLE_CLIENT_ID: z.string().trim().min(1).optional(),
   DAILY_RESET_TIMEZONE: z
     .string()

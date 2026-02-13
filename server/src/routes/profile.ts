@@ -52,6 +52,7 @@ export async function profileRoutes(app: FastifyInstance) {
     return {
       id: profile.id,
       username: profile.username,
+      role: profile.role,
       email: profile.email ? decryptPii(profile.email) : null,
       createdAt: profile.createdAt,
       updatedAt: profile.updatedAt,
@@ -187,6 +188,7 @@ export async function profileRoutes(app: FastifyInstance) {
     return {
       id: updated.id,
       username: updated.username,
+      role: updated.role,
       email: updated.email ? decryptPii(updated.email) : null,
       createdAt: updated.createdAt,
       updatedAt: updated.updatedAt,
@@ -228,6 +230,7 @@ export async function profileRoutes(app: FastifyInstance) {
       account: {
         id: user.id,
         username: user.username,
+        role: user.role,
         email: user.email ? decryptPii(user.email) : null,
         oauthProvider: user.oauthProvider,
         settings: user.settings,

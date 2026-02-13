@@ -20,6 +20,7 @@ const MatchDetailView = lazy(() =>
 );
 const DailyChallenge = lazy(() => import("./pages/DailyChallenge"));
 const Leaderboard = lazy(() => import("./pages/Leaderboard"));
+const Admin = lazy(() => import("./pages/Admin"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const TermsOfService = lazy(() => import("./pages/TermsOfService"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -59,6 +60,7 @@ const App = () => (
               <Route path="/history/:matchId" element={<MatchDetailView />} />
               <Route path="/daily" element={<DailyChallenge />} />
               <Route path="/leaderboard" element={<Leaderboard />} />
+              <Route path="/admin" element={<Admin />} />
               <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="/terms" element={<TermsOfService />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

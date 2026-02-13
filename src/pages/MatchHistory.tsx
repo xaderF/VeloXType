@@ -415,10 +415,22 @@ export function MatchDetailView() {
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-xs">
-                        <MetricChip label="You WPM" value={round.youWpm} />
-                        <MetricChip label="Opp WPM" value={round.opponentWpm} />
-                        <MetricChip label="You Chars" value={round.youChars} />
-                        <MetricChip label="Opp Chars" value={round.opponentChars} />
+                        <div className="rounded-md border border-border/70 bg-background/30 px-2 py-1.5">
+                          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">You WPM</div>
+                          <div className="font-mono text-sm">{round.youWpm}</div>
+                        </div>
+                        <div className="rounded-md border border-border/70 bg-background/30 px-2 py-1.5">
+                          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Opp WPM</div>
+                          <div className="font-mono text-sm">{round.opponentWpm}</div>
+                        </div>
+                        <div className="rounded-md border border-border/70 bg-background/30 px-2 py-1.5">
+                          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">You Chars</div>
+                          <div className="font-mono text-sm">{round.youChars}</div>
+                        </div>
+                        <div className="rounded-md border border-border/70 bg-background/30 px-2 py-1.5">
+                          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Opp Chars</div>
+                          <div className="font-mono text-sm">{round.opponentChars}</div>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -633,15 +645,6 @@ function HeadToHeadTable({
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-function MetricChip({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="rounded-md border border-border/70 bg-background/30 px-2 py-1.5">
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="font-mono text-sm">{value}</div>
-    </div>
   );
 }
 

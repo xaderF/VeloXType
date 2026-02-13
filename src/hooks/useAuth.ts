@@ -10,6 +10,7 @@ const STORAGE_MODE_KEY = 'veloxtype_auth_storage_mode';
 export interface AuthUser {
   id: string;
   username: string;
+  role: 'USER' | 'ADMIN';
   email: string | null;
   rating: number | null;           // hidden MMR (null = unranked)
   competitiveElo: number | null;   // null until Apex; starts at 0 on promotion
@@ -41,7 +42,16 @@ function loadPersistedAuth(): AuthState {
     }
 
     if (token && userJson) {
-      return { token, user: JSON.parse(userJson) as AuthUser };
+      const parsed = JSON.parse(userJson) as Partial<AuthUser>;
+      if (typeof parsed.id === 'string' && typeof parsed.username === 'string') {
+        return {
+          token,
+          user: {
+            ...parsed,
+            role: parsed.role === 'ADMIN' ? 'ADMIN' : 'USER',
+          } as AuthUser,
+        };
+      }
     }
   } catch { /* ignore */ }
   return { token: null, user: null };
@@ -92,6 +102,7 @@ export function useAuth() {
       const user: AuthUser = {
         id: data.id,
         username: data.username,
+        role: data.role === 'ADMIN' ? 'ADMIN' : 'USER',
         email: data.email,
         rating: data.rating,
         competitiveElo: data.competitiveElo ?? null,
@@ -129,6 +140,7 @@ export function useAuth() {
       const user: AuthUser = {
         id: data.user.id,
         username: data.user.username,
+        role: data.user.role === 'ADMIN' ? 'ADMIN' : 'USER',
         email: data.user.email,
         rating: data.user.rating,
         competitiveElo: data.user.competitiveElo ?? null,
@@ -163,6 +175,7 @@ export function useAuth() {
       const user: AuthUser = {
         id: data.user.id,
         username: data.user.username,
+        role: data.user.role === 'ADMIN' ? 'ADMIN' : 'USER',
         email: data.user.email,
         rating: data.user.rating,
         competitiveElo: data.user.competitiveElo ?? null,
