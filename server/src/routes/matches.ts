@@ -3,6 +3,91 @@ import { z } from 'zod';
 import { getBearerToken, verifyAuthToken } from '../auth.js';
 import { prisma } from '../db.js';
 
+type AuthUser = {
+  id: string;
+  username: string;
+  role: 'USER' | 'ADMIN';
+};
+
+interface MatchRoutesDb {
+  matchPlayer: {
+    count: (args: unknown) => Promise<number>;
+    findMany: (args: unknown) => Promise<Array<{
+      userId: string;
+      wpm: number | null;
+      accuracy: number | null;
+      consistency: number | null;
+      score: number | null;
+      result: string | null;
+      damageDealt: number | null;
+      damageTaken: number | null;
+      rawWpm: number | null;
+      errors: number | null;
+      ratingBefore: number | null;
+      ratingAfter: number | null;
+      ratingDelta: number | null;
+      match: {
+        id: string;
+        createdAt: Date;
+        mode: string;
+        limit: number;
+        status: string;
+        seed: string;
+        players: Array<{
+          userId: string;
+          wpm: number | null;
+          accuracy: number | null;
+          consistency: number | null;
+          score: number | null;
+          result: string | null;
+          user: {
+            username: string;
+            rating: { rating: number | null; competitiveElo: number | null } | null;
+          };
+        }>;
+      };
+    }>>;
+  };
+  match: {
+    findFirst: (args: unknown) => Promise<{
+      id: string;
+      seed: string;
+      mode: string;
+      limit: number;
+      status: string;
+      createdAt: Date;
+      players: Array<{
+        userId: string;
+        wpm: number | null;
+        accuracy: number | null;
+        consistency: number | null;
+        score: number | null;
+        result: string | null;
+        damageDealt: number | null;
+        damageTaken: number | null;
+        rawWpm: number | null;
+        errors: number | null;
+        correctChars: number | null;
+        totalTyped: number | null;
+        ratingBefore: number | null;
+        ratingAfter: number | null;
+        ratingDelta: number | null;
+        progressSamples: unknown;
+        user: {
+          username: string;
+          rating: { rating: number | null; competitiveElo: number | null } | null;
+        };
+      }>;
+    } | null>;
+  };
+}
+
+export interface MatchRoutesDeps {
+  db?: MatchRoutesDb | null;
+  getBearerToken?: (authorization?: string) => string | null;
+  verifyAuthToken?: (token: string) => AuthUser | null;
+}
+
 const DATABASE_UNAVAILABLE_MESSAGE = 'Database is not configured. Set DATABASE_URL and run migrations.';
 
 function sendDatabaseUnavailable(reply: FastifyReply) {
@@ -14,18 +99,20 @@ const listQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
-export async function matchRoutes(app: FastifyInstance) {
-  if (!prisma) {
+export async function matchRoutes(app: FastifyInstance, deps: MatchRoutesDeps = {}) {
+  const db = deps.db ?? prisma;
+  const parseBearer = deps.getBearerToken ?? getBearerToken;
+  const verifyToken = deps.verifyAuthToken ?? verifyAuthToken;
+
+  if (!db) {
     app.get('/matches', async (_request: FastifyRequest, reply: FastifyReply) => sendDatabaseUnavailable(reply));
     app.get('/matches/:matchId', async (_request: FastifyRequest, reply: FastifyReply) => sendDatabaseUnavailable(reply));
     return;
   }
 
-  const db = prisma;
-
   app.get('/matches', async (request: FastifyRequest, reply: FastifyReply) => {
-    const token = getBearerToken(request.headers.authorization);
-    const authUser = token ? verifyAuthToken(token) : null;
+    const token = parseBearer(request.headers.authorization);
+    const authUser = token ? verifyToken(token) : null;
     if (!authUser) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
@@ -119,8 +206,8 @@ export async function matchRoutes(app: FastifyInstance) {
   });
 
   app.get('/matches/:matchId', async (request: FastifyRequest, reply: FastifyReply) => {
-    const token = getBearerToken(request.headers.authorization);
-    const authUser = token ? verifyAuthToken(token) : null;
+    const token = parseBearer(request.headers.authorization);
+    const authUser = token ? verifyToken(token) : null;
     if (!authUser) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
