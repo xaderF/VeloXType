@@ -2,7 +2,7 @@ export default function TermsOfService() {
   return (
     <div className="mx-auto max-w-3xl px-6 py-16 text-foreground">
       <h1 className="mb-8 text-3xl font-bold">Terms of Service</h1>
-      <p className="mb-4 text-sm text-muted-foreground">Last updated: February 9, 2026</p>
+      <p className="mb-4 text-sm text-muted-foreground">Last updated: February 26, 2026</p>
 
       <section className="space-y-4 text-sm leading-relaxed text-muted-foreground">
         <h2 className="text-lg font-semibold text-foreground">1. Acceptance of Terms</h2>
@@ -54,8 +54,9 @@ export default function TermsOfService() {
 
         <h2 className="text-lg font-semibold text-foreground">7. Intellectual Property</h2>
         <p>
-          The VeloXType source code is available under the MIT License. However, the Service (including
-          its design, branding, and user-generated data) remains the property of its operators.
+          The VeloXType source code is available under the GNU Affero General Public License v3.0 (or
+          later). However, the Service (including its design, branding, and user-generated data) remains
+          the property of its operators.
         </p>
 
         <h2 className="text-lg font-semibold text-foreground">8. Termination</h2>
